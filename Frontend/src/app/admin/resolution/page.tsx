@@ -37,7 +37,7 @@ export default function ResolutionPage() {
     const attention = incidents.filter(i => i.status === "POSSIBLY_UNRESOLVED");
 
     const handleReopen = async (incident: Incident) => {
-        if (window.confirm(`Reopen investigation for ${incident.title}?\n\nThis will transition the incident back to active monitoring.`)) {
+        if (window.confirm(`Reopen incident for ${incident.title}?\n\nThis will transition the incident back to active monitoring.`)) {
             const repo = new DemoIncidentRepository();
             const updated = await repo.updateIncident(incident.id, { status: "REOPENED" });
             setIncidents(prev => prev.map(i => i.id === incident.id ? updated : i));
@@ -110,7 +110,7 @@ export default function ResolutionPage() {
                                 <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
                                     <p className="text-sm text-amber-900 font-medium mb-3">Recommended: Review the incident again.</p>
                                     <div className="flex gap-3 flex-wrap">
-                                        <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleReopen(inc)}>Reopen investigation</Button>
+                                        <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleReopen(inc)}>Reopen incident</Button>
                                         <Button variant="outline" className="bg-white" onClick={() => handleKeepResolved(inc)}>Keep resolved</Button>
                                     </div>
                                 </div>

@@ -91,11 +91,8 @@ function generateIncident(complaints: Complaint[], incidentIndex: string): Incid
     const baseComplaint = complaints[0];
     const category = baseComplaint.category;
 
-    // Derive priority from maximum severity in complaints
-    let highestPriority = 0;
-    let priorityStr: Complaint["priority"] = "LOW";
-
-    // Map priorities to numerical weights loosely
+    // Derive priority from category, average severity, and scale
+    let sumPriority = 0;
     const priorityWeights: Record<string, number> = { "CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1 };
 
     // Track bounds for location average and timestamps
@@ -105,11 +102,7 @@ function generateIncident(complaints: Complaint[], incidentIndex: string): Incid
     let maxTime = 0;
 
     for (const c of complaints) {
-        const weight = priorityWeights[c.priority.toUpperCase()] || 1;
-        if (weight > highestPriority) {
-            highestPriority = weight;
-            priorityStr = c.priority;
-        }
+        sumPriority += priorityWeights[c.priority.toUpperCase()] || 1;
 
         if (c.latitude && c.longitude) {
             sumLat += c.latitude;
@@ -125,6 +118,23 @@ function generateIncident(complaints: Complaint[], incidentIndex: string): Incid
     const baselineCount = getBaselineActivityForCategory(category);
     const growthMultiple = calculateGrowthMultiple(complaints.length, baselineCount);
 
+    const avgSeverity = sumPriority / complaints.length;
+    let priorityStr: Complaint["priority"] = "MEDIUM";
+
+    // Domain rule: Public Safety can escalate to CRITICAL easily.
+    // Infrastructure like Water/Roads tops out at HIGH strictly unless average is very extreme.
+    if (category === "Public Safety" && (growthMultiple > 3 || avgSeverity > 3)) {
+        priorityStr = "CRITICAL";
+    } else if (avgSeverity >= 3.5 && growthMultiple > 6) { // Very hard to reach CRITICAL for Water natively
+        priorityStr = "CRITICAL";
+    } else if (avgSeverity >= 2.5 || growthMultiple > 4) {
+        priorityStr = "HIGH";
+    } else if (avgSeverity >= 1.5 || growthMultiple > 2) {
+        priorityStr = "MEDIUM";
+    } else {
+        priorityStr = "LOW";
+    }
+
     // Define title systematically 
     let title = `${category} Issue`;
     if (category === "Water") title = "Water Supply Outage";
@@ -137,6 +147,7 @@ function generateIncident(complaints: Complaint[], incidentIndex: string): Incid
         title,
         category,
         priority: priorityStr, // inherited securely
+
         status: "EMERGING",
 
         locationLabel: baseComplaint.locationLabel || "Multiple Locations",

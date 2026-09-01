@@ -169,7 +169,7 @@ export default function AdminOverview() {
                                             <Badge variant="outline" className={`bg-${colorTheme}-50 text-${colorTheme}-700 border-${colorTheme}-200 font-medium border-transparent`}>{incident.status}</Badge>
                                             <Link href={`/admin/incidents/${incident.id}`}>
                                                 <Button variant={isHighOrCrit ? "default" : "secondary"} size="sm" className={`w-full sm:w-auto ${!isHighOrCrit && 'bg-white border border-gray-200'}`}>
-                                                    Review incident <ChevronRight className="w-4 h-4 ml-1" />
+                                                    View incident <ChevronRight className="w-4 h-4 ml-1" />
                                                 </Button>
                                             </Link>
                                         </div>

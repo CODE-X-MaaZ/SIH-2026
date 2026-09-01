@@ -19,7 +19,7 @@ export default function AdminLayout({
                     <Link href="/admin" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-800 hover:text-white transition-colors bg-slate-800/50 text-white font-medium">
                         <Map className="w-4 h-4" /> Overview
                     </Link>
-                    <Link href="/admin/incidents" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-800 hover:text-white transition-colors">
+                    <Link href="/admin/incidents?status=EMERGING" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-800 hover:text-white transition-colors">
                         <AlertTriangle className="w-4 h-4" /> Emerging
                     </Link>
                     <Link href="/admin/incidents" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-800 hover:text-white transition-colors">

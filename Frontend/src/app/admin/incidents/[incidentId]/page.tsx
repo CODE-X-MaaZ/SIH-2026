@@ -4,13 +4,14 @@ import Link from "next/link";
 import { ArrowLeft, MapPin, Building2, Users, AlertTriangle, TrendingUp, Clock, CheckCircle2, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { DemoIncidentRepository, DemoComplaintRepository } from "@/lib/data/demo-repository";
 import { Incident, Complaint } from "@/types";
 import { DEMO_EVIDENCE } from "@/data/demo/incidents";
 import { MapView } from "@/components/ui/map-view";
 
-export default function IncidentDetail({ params }: { params: { incidentId: string } }) {
+export default function IncidentDetail({ params }: { params: Promise<{ incidentId: string }> }) {
+    const { incidentId } = use(params);
     const [incident, setIncident] = useState<Incident | null>(null);
     const [complaints, setComplaints] = useState<Complaint[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -19,7 +20,7 @@ export default function IncidentDetail({ params }: { params: { incidentId: strin
         async function load() {
             const incRepo = new DemoIncidentRepository();
             const compRepo = new DemoComplaintRepository();
-            const inc = await incRepo.getIncident(params.incidentId);
+            const inc = await incRepo.getIncident(incidentId);
             if (inc) {
                 const allComps = await compRepo.listComplaints();
                 const related = allComps.filter(c => inc.complaintIds.includes(c.id)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -29,7 +30,7 @@ export default function IncidentDetail({ params }: { params: { incidentId: strin
             setIsLoading(false);
         }
         load();
-    }, [params.incidentId]);
+    }, [incidentId]);
 
     const handleUpdateStatus = async (status: Incident["status"]) => {
         if (!incident) return;

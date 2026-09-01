@@ -174,7 +174,7 @@ export default function ReviewPage() {
 
             <div className="mt-auto pt-4 space-y-3 flex flex-col">
                 <Button className="w-full h-14 text-lg rounded-xl" onClick={handleSubmit}>
-                    Looks correct — submit
+                    Submit report
                 </Button>
                 <Link href="/report" className="w-full">
                     <Button variant="outline" className="w-full h-14 text-lg rounded-xl">

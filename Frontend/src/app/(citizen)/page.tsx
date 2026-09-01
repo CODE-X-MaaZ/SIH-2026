@@ -53,7 +53,7 @@ export default function CitizenHome() {
         <Link href="/track" passHref>
           <Button variant="ghost" className="w-full text-gray-600 hover:text-gray-900 justify-center h-14 text-base rounded-xl">
             <MapPin className="w-5 h-5 mr-2 text-gray-400" />
-            Track my complaint
+            Track my report
           </Button>
         </Link>
       </div>

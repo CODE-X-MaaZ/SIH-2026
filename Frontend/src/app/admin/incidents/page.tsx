@@ -4,24 +4,32 @@ import Link from "next/link";
 import { AlertTriangle, Clock, MapPin, ChevronRight, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { DemoIncidentRepository } from "@/lib/data/demo-repository";
 import { Incident } from "@/types";
 
-export default function IncidentsPage() {
+function IncidentsList() {
     const [incidents, setIncidents] = useState<Incident[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const searchParams = useSearchParams();
+    const statusFilter = searchParams.get("status");
 
     useEffect(() => {
         async function load() {
             const incRepo = new DemoIncidentRepository();
-            const incs = await incRepo.listIncidents();
+            let incs = await incRepo.listIncidents();
+
+            if (statusFilter) {
+                incs = incs.filter(i => i.status === statusFilter);
+            }
+
             // Sort by priority and growth
             setIncidents(incs.sort((a, b) => b.growthMultiple - a.growthMultiple));
             setIsLoading(false);
         }
         load();
-    }, []);
+    }, [statusFilter]);
 
     const getPriorityColor = (priority: string) => {
         switch (priority) {
@@ -89,7 +97,7 @@ export default function IncidentsPage() {
                                     </div>
                                     <div className="sm:hidden mt-2">
                                         <Link href={`/admin/incidents/${incident.id}`} className="w-full block">
-                                            <Button variant="outline" className="w-full">Review Incident</Button>
+                                            <Button variant="outline" className="w-full">View incident</Button>
                                         </Link>
                                     </div>
                                 </div>
@@ -99,5 +107,13 @@ export default function IncidentsPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function IncidentsPage() {
+    return (
+        <Suspense fallback={<div className="max-w-7xl mx-auto space-y-8 pb-12 p-8">Loading...</div>}>
+            <IncidentsList />
+        </Suspense>
     );
 }

@@ -83,14 +83,46 @@ export class DemoComplaintRepository implements IComplaintRepository {
 }
 
 export class DemoIncidentRepository implements IIncidentRepository {
-    private getLocalIncidents(): Incident[] {
-        if (typeof window === "undefined") return DEMO_INCIDENTS;
-        const stored = localStorage.getItem("nagrik_demo_incidents");
-        if (!stored) {
-            localStorage.setItem("nagrik_demo_incidents", JSON.stringify(DEMO_INCIDENTS));
-            return DEMO_INCIDENTS;
+    private getLocalIncidentsOverridden(): Incident[] {
+        // 1. Get raw complaints natively from DemoComplaintRepository
+        // This ensures citizen additions are processed
+        const compRepo = new DemoComplaintRepository();
+
+        let complaints = [];
+        if (typeof window !== "undefined") {
+            const stored = localStorage.getItem("nagrik_demo_complaints");
+            if (stored) {
+                complaints = JSON.parse(stored);
+            }
         }
-        return JSON.parse(stored);
+        if (complaints.length === 0) complaints = DEMO_COMPLAINTS;
+
+        // 2. Process Radar Clustering iteratively overriding the build-time generation
+        const { buildIncidents } = require("@/lib/radar/clustering");
+        const generated = buildIncidents(complaints);
+
+        // 3. Apply manual overrides (status, etc.)
+        let storedIncidents: Incident[] = DEMO_INCIDENTS;
+        if (typeof window !== "undefined") {
+            const stored = localStorage.getItem("nagrik_demo_incidents");
+            if (stored) storedIncidents = JSON.parse(stored);
+            else localStorage.setItem("nagrik_demo_incidents", JSON.stringify(DEMO_INCIDENTS));
+        }
+
+        const merged = generated.map((gen: Incident) => {
+            const override = storedIncidents.find((i: Incident) => i.id === gen.id);
+            if (override) {
+                return { ...gen, status: override.status };
+            }
+            return gen;
+        });
+
+        // Add back incidents that were in stored but aren't in generated anymore? None, demo is append-only.
+        return merged;
+    }
+
+    private getLocalIncidents(): Incident[] {
+        return this.getLocalIncidentsOverridden();
     }
 
     private saveLocalIncidents(incidents: Incident[]) {
@@ -100,15 +132,17 @@ export class DemoIncidentRepository implements IIncidentRepository {
     }
 
     async getIncident(id: string): Promise<Incident | null> {
-        const incidents = this.getLocalIncidents();
+        const incidents = this.getLocalIncidentsOverridden();
         return incidents.find(i => i.id === id) || null;
     }
 
     async listIncidents(filters?: any): Promise<Incident[]> {
-        return this.getLocalIncidents();
+        return this.getLocalIncidentsOverridden();
     }
 
     async updateIncident(id: string, updates: Partial<Incident>): Promise<Incident> {
+        // For updates, we fetch the overridden, identify the update, and save the base version overridden 
+        // into nagrik_demo_incidents since the recalculation always respects nagrik_demo_incidents overrides.
         const incidents = this.getLocalIncidents();
         const index = incidents.findIndex(i => i.id === id);
 
