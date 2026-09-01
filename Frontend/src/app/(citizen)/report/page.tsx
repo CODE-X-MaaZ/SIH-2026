@@ -19,12 +19,16 @@ function ReportForm() {
     const [transcript, setTranscript] = useState("");
     const recognitionRef = useRef<any>(null);
 
+    const [voiceError, setVoiceError] = useState("");
+
     // Text & generic state
     const [text, setText] = useState("");
     const [location, setLocation] = useState<LocationResult | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
+        let isMounted = true;
+
         // Load preserved initial text if "Edit report" was clicked
         const preservedReport = sessionStorage.getItem("nagrik_draft_report");
         if (preservedReport) {
@@ -37,8 +41,8 @@ function ReportForm() {
         if (typeof window !== "undefined") {
             const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                setIsVoiceSupported(false);
-                if (initialMode === "voice") {
+                if (isMounted) setIsVoiceSupported(false);
+                if (initialMode === "voice" && isMounted) {
                     setMode("text");
                 }
             } else {
@@ -48,6 +52,7 @@ function ReportForm() {
                 recognitionRef.current.lang = 'en-IN';
 
                 recognitionRef.current.onresult = (event: any) => {
+                    if (!isMounted) return;
                     let currentTranscript = "";
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         currentTranscript += event.results[i][0].transcript;
@@ -57,23 +62,51 @@ function ReportForm() {
                 };
 
                 recognitionRef.current.onerror = (event: any) => {
-                    console.error("Speech recognition error", event.error);
+                    if (!isMounted) return;
                     setIsListening(false);
+
+                    let userFriendlyMessage = "Voice input is unavailable. Please try again or type your report.";
+                    if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                        userFriendlyMessage = "Microphone access was denied. You can type your report instead.";
+                    } else if (event.error === 'network') {
+                        userFriendlyMessage = "Voice input is temporarily unavailable. Please type your report instead.";
+                    } else if (event.error === 'no-speech') {
+                        userFriendlyMessage = "We couldn't hear anything. Please try again.";
+                    } else if (event.error === 'audio-capture') {
+                        userFriendlyMessage = "We couldn't access your microphone. Please check your microphone settings.";
+                    } else if (event.error === 'aborted') {
+                        userFriendlyMessage = ""; // Intentionally aborted by user interaction
+                    }
+
+                    if (userFriendlyMessage) {
+                        setVoiceError(userFriendlyMessage);
+                    }
                 };
 
                 recognitionRef.current.onend = () => {
-                    setIsListening(false);
+                    if (isMounted) setIsListening(false);
                 };
             }
         }
 
         // Load location
-        getCurrentLocation().then(loc => setLocation(loc)).catch(console.error);
+        getCurrentLocation().then(loc => {
+            if (isMounted) setLocation(loc);
+        }).catch(() => { /* handled internally */ });
+
+        return () => {
+            isMounted = false;
+            if (recognitionRef.current) {
+                recognitionRef.current.abort();
+                recognitionRef.current = null;
+            }
+        };
 
     }, [initialMode]);
 
     const toggleListening = () => {
         if (!recognitionRef.current) return;
+        setVoiceError("");
         if (isListening) {
             recognitionRef.current.stop();
             setIsListening(false);
@@ -158,6 +191,12 @@ function ReportForm() {
                                     <Mic className={`w-12 h-12 ${isListening ? 'text-white animate-pulse' : 'text-gray-500'}`} />
                                 </button>
                             </div>
+
+                            {voiceError && (
+                                <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm text-center">
+                                    {voiceError}
+                                </div>
+                            )}
 
                             <div className="text-center space-y-2 min-h-[100px]">
                                 {isListening ? (

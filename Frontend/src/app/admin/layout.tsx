@@ -29,7 +29,7 @@ export default function AdminLayout({
                         <MapPin className="w-4 h-4" /> Hotspots
                     </Link>
                     <Link href="/admin/complaints" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-800 hover:text-white transition-colors">
-                        <ListTodo className="w-4 h-4" /> Complaints
+                        <ListTodo className="w-4 h-4" /> Reports
                     </Link>
                     <Link href="/admin/resolution" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-800 hover:text-white transition-colors">
                         <CheckCircle2 className="w-4 h-4" /> Resolution

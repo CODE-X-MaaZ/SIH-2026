@@ -239,12 +239,32 @@ export default function IncidentDetail({ params }: { params: Promise<{ incidentI
                     <section className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
                         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Incident Growth</h2>
                         <div className="bg-gray-50 w-full h-40 rounded-xl border border-gray-100 flex items-end px-2 pt-8 pb-2 gap-1.5">
-                            {/* Deterministic mock bars based on complaint volume spread over time */}
-                            {[2, 3, 5, Math.max(5, Math.floor(complaints.length / 3)), Math.floor(complaints.length / 2), complaints.length].map((val, i, arr) => (
-                                <div key={i} className="w-full bg-indigo-500 rounded-sm hover:bg-indigo-600 transition-colors cursor-pointer group relative" style={{ height: `${Math.max(10, (val / arr[arr.length - 1]) * 100)}%` }}>
-                                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 shadow-sm rounded-sm">{val}</span>
-                                </div>
-                            ))}
+                            {(() => {
+                                if (complaints.length === 0) return null;
+                                const bucketCount = 6;
+                                const now = Date.now();
+                                const min = Math.min(...complaints.map(c => new Date(c.createdAt).getTime()));
+                                const span = Math.max(now - min, 3600000); // Minimum scale 1 hour
+                                const size = span / bucketCount;
+                                const buckets = Array(bucketCount).fill(0);
+
+                                complaints.forEach(c => {
+                                    const time = new Date(c.createdAt).getTime();
+                                    const idx = Math.min(bucketCount - 1, Math.floor((time - min) / size));
+                                    if (idx >= 0) buckets[idx]++;
+                                });
+
+                                // Compute cumulative growth for visualizing surge natively
+                                let runningTotal = 0;
+                                const growthBuckets = buckets.map(b => { runningTotal += b; return runningTotal; });
+                                const maxVal = Math.max(...growthBuckets, 1);
+
+                                return growthBuckets.map((val, i) => (
+                                    <div key={i} className="w-full bg-indigo-500 rounded-sm hover:bg-indigo-600 transition-colors cursor-pointer group relative" style={{ height: `${Math.max(10, (val / maxVal) * 100)}%` }}>
+                                        <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity bg-white px-1 shadow-sm rounded-sm">{val}</span>
+                                    </div>
+                                ));
+                            })()}
                         </div>
                         <div className="flex justify-between text-xs text-gray-400 mt-2 font-medium bg-gray-50/50 p-2 rounded">
                             <span>Older baseline</span>
