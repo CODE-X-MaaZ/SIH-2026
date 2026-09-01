@@ -1,0 +1,11 @@
+
+> nagrik-frontend@0.1.0 start
+> next start
+
+▲ Next.js 16.3.4
+- Local:         http://localhost:3000
+- Network:       http://192.168.5.243:3000
+✓ Ready in 98ms
+✓ Running next.config.ts took 17ms
+Error: Could not find a production build in the '.next' directory. Try building your app with 'next build' before starting the production server. https://nextjs.org/docs/messages/production-start-no-build-id
+    at ignore-listed frames
