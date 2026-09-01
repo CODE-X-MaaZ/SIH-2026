@@ -1,0 +1,12 @@
+[360x800] /report?mode=text -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[360x800] /report?mode=text -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[360x800] /report/review -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[360x800] /report/review -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[768x1024] /report?mode=text -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[768x1024] /report?mode=text -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[768x1024] /report/review -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[768x1024] /report/review -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[1440x900] /report?mode=text -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[1440x900] /report?mode=text -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[1440x900] /report/review -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
+[1440x900] /report/review -> warning: Geolocation failed or denied, using fallback GeolocationPositionError
