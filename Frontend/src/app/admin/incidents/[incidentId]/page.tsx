@@ -72,8 +72,22 @@ export default function IncidentDetail({ params }: { params: { incidentId: strin
         : `An unusually dense cluster of ${incident.category.toLowerCase()} reports indicates a systemic infrastructure issue.`;
 
     const mapPoints = [
-        { latitude: incident.latitude || 0, longitude: incident.longitude || 0, color: "bg-indigo-600", isCenter: true },
-        ...complaints.slice(0, 10).map(c => ({ latitude: c.latitude || 0, longitude: c.longitude || 0, color: "bg-indigo-400" }))
+        { id: incident.id, latitude: incident.latitude || 0, longitude: incident.longitude || 0, color: "bg-indigo-600", isCenter: true, type: "incident" as const, label: "Incident Center" },
+        ...complaints.slice(0, 10).map(c => ({
+            id: c.id,
+            latitude: c.latitude || 0,
+            longitude: c.longitude || 0,
+            color: "bg-indigo-400 opacity-60",
+            type: "complaint" as const,
+            label: c.issueTitle,
+            popupContent: (
+                <div className="space-y-1">
+                    <div className="font-bold">{c.issueTitle}</div>
+                    <div className="text-xs text-gray-500">Tracking: {c.trackingId}</div>
+                    <div className="text-xs text-gray-500 line-clamp-1">{c.originalText}</div>
+                </div>
+            )
+        }))
     ];
 
     return (

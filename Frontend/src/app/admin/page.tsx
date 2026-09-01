@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { DemoIncidentRepository, DemoComplaintRepository } from "@/lib/data/demo-repository";
 import { Incident } from "@/types";
+import { MapView } from "@/components/ui/map-view";
 
 export default function AdminOverview() {
     const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -73,20 +74,48 @@ export default function AdminOverview() {
 
             {/* Main Area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Left: Map Area placeholder */}
-                <div className="lg:col-span-2 space-y-4">
+                {/* Left: Map Area */}
+                <div className="lg:col-span-2 space-y-4 flex flex-col h-full">
                     <h2 className="text-lg font-semibold text-gray-900">Live Map</h2>
-                    <div className="bg-gray-200 w-full h-[600px] rounded-2xl flex items-center justify-center border border-gray-300 relative overflow-hidden bg-[url('https://api.mapbox.com/styles/v1/mapbox/light-v11/static/72.8777,19.0760,11/800x600?access_token=pk.eyJ1IjoiZXhhbXBsZSIsImEiOiJjbGV4YW1wbGUifQ.example')] bg-cover bg-center">
-                        <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px]"></div>
-                        <div className="z-10 flex flex-col items-center text-gray-700 bg-white/90 p-4 rounded-xl shadow-sm border border-gray-200">
-                            <MapPin className="w-8 h-8 mb-2" />
-                            <p className="font-medium text-sm">Interactive Map (Pending Phase 5)</p>
-                            <p className="text-xs text-gray-500 mt-1">Showing deterministic overview</p>
-                        </div>
-                        {/* Mock dots mapping directly to incidents roughly */}
-                        {incidents.slice(0, 3).map((inc, i) => (
-                            <div key={inc.id} className={`absolute w-6 h-6 rounded-full border-4 border-white shadow-lg animate-pulse ${inc.priority === 'CRITICAL' || inc.priority === 'HIGH' ? 'bg-red-500' : 'bg-amber-500'}`} style={{ top: `${30 + (i * 15)}%`, left: `${40 + (i * 10)}%` }}></div>
-                        ))}
+                    <div className="w-full h-[600px] rounded-2xl border border-gray-300 relative overflow-hidden shadow-sm flex-1 z-0">
+                        <MapView
+                            className="h-full w-full"
+                            points={incidents.map(inc => ({
+                                id: inc.id,
+                                latitude: inc.latitude || 0,
+                                longitude: inc.longitude || 0,
+                                color: (inc.priority === 'CRITICAL' || inc.priority === 'HIGH') ? 'red' : 'amber',
+                                label: inc.title,
+                                type: 'incident',
+                                isCenter: true,
+                                popupContent: (
+                                    <div className="space-y-2 min-w-[200px]">
+                                        <div className="font-bold flex items-center justify-between">
+                                            <span>{inc.title}</span>
+                                            <Badge variant={inc.priority === 'CRITICAL' || inc.priority === 'HIGH' ? 'destructive' : 'secondary'} className="ml-2 text-[10px] uppercase">
+                                                {inc.priority}
+                                            </Badge>
+                                        </div>
+                                        <div className="text-xs text-gray-500 font-medium">
+                                            {inc.locationLabel}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-100">
+                                            <div>
+                                                <div className="text-[10px] text-gray-400 uppercase tracking-wider">Reports</div>
+                                                <div className="font-medium">{inc.reportCount}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] text-gray-400 uppercase tracking-wider">Growth</div>
+                                                <div className="font-bold text-red-600">{inc.growthMultiple.toFixed(1)}×</div>
+                                            </div>
+                                        </div>
+                                        <Link href={`/admin/incidents/${inc.id}`} className="block mt-2 text-indigo-600 font-medium hover:underline text-xs flex items-center">
+                                            View incident details <ChevronRight className="w-3 h-3 ml-1" />
+                                        </Link>
+                                    </div>
+                                )
+                            }))}
+                        />
                     </div>
                 </div>
 
