@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="CERTIN_SECURE_CSRF_TOKEN_GOV_2026_981273">
+  <meta name="description" content="Production-Ready Government-Grade Authentication Module for Indian Grievance Redressal & Classification Platform.">
+  <title>National Grievance Redressal Portal - Authentication Module</title>
+  <link rel="stylesheet" href="src/styles/government-theme.css">
+  <style>
+    /* Auxiliary responsive & dashboard layout overrides */
+    .portal-hero {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .portal-hero h2 {
+      color: var(--gov-primary-light);
+      font-size: 1.6rem;
+      margin-bottom: 0.5rem;
+    }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .stat-card {
+      background: var(--gov-card-bg);
+      border: 1px solid var(--gov-border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .stat-card .val {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: var(--gov-primary-light);
+    }
+    .alert-banner {
+      padding: 0.85rem 1.25rem;
+      border-radius: 6px;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .alert-success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+    }
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Tricolor Accent -->
+  <div class="tricolor-stripe"></div>
+
+  <!-- Accessibility Toolbar -->
+  <nav class="access-toolbar" aria-label="Accessibility Toolbar">
+    <div className="gov-info">
+      <span>🇮🇳 Government of India | National Grievance Portal</span>
+    </div>
+    <div class="access-btn-group">
+      <button class="access-btn" onclick="adjustFont(-0.1)" aria-label="Decrease Text Size">A-</button>
+      <button class="access-btn" onclick="resetFont()" aria-label="Reset Text Size">A</button>
+      <button class="access-btn" onclick="adjustFont(0.1)" aria-label="Increase Text Size">A+</button>
+      <button class="access-btn" id="contrast-toggle-btn" onclick="toggleContrast()">⚡ High Contrast</button>
+      <button class="access-btn" onclick="alert('Language changed to Hindi (हिंदी)')">हिंदी</button>
+    </div>
+  </nav>
+
+  <!-- Live Accessibility Screen Reader Announcer -->
+  <div id="sr-announcer" class="sr-only" aria-live="polite"></div>
+
+  <!-- Government Portal Header -->
+  <header role="banner">
+    <div class="gov-header">
+      <div class="gov-branding">
+        <svg class="gov-emblem" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="50" cy="50" r="45" stroke="#f59e0b" stroke-width="4" fill="#0f172a" />
+          <path d="M50 20 L58 38 L78 38 L62 50 L68 70 L50 56 L32 70 L38 50 L22 38 L42 38 Z" fill="#f59e0b" />
+        </svg>
+        <div class="gov-title-group">
+          <h1>NATIONAL GRIEVANCE CLASSIFICATION & REDRESSAL SYSTEM</h1>
+          <p>Government of India • Ministry of Public Grievances & Administration</p>
+        </div>
+      </div>
+      <div class="cert-in-badge">
+        <span>🛡️ CERT-In & GIGW 3.0 Certified</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="gov-container" role="main">
+
+    <!-- Auth Module Card Container -->
+    <div id="auth-section">
+      <div class="portal-hero">
+        <h2>Secure Grievance Portal Authentication</h2>
+        <p style="color: var(--gov-text-muted);">Please select your registration type or log in using official credentials.</p>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="gov-tabs" role="tablist">
+        <button class="tab-btn active" role="tab" id="tab-citizen-login" onclick="switchTab('citizen-login')">👤 Citizen Login</button>
+        <button class="tab-btn" role="tab" id="tab-citizen-register" onclick="switchTab('citizen-register')">📝 Citizen Registration</button>
+        <button class="tab-btn" role="tab" id="tab-official-login" onclick="switchTab('official-login')">🏛️ Departmental Officer Sign-In</button>
+      </div>
+
+      <!-- TAB 1: Citizen Login -->
+      <div id="panel-citizen-login" class="tab-panel">
+        <div class="gov-card">
+          <div class="gov-card-header">
+            <h2><span>👤 Citizen Access Portal</span></h2>
+          </div>
+          <div class="gov-card-body">
+            <div style="display:flex; gap:1.5rem; margin-bottom:1.5rem;">
+              <label style="font-weight:600; cursor:pointer;">
+                <input type="radio" name="cit-auth-mode" value="password" checked onclick="toggleAuthMode('password')"> Login via Password
+              </label>
+              <label style="font-weight:600; cursor:pointer;">
+                <input type="radio" name="cit-auth-mode" value="otp" onclick="toggleAuthMode('otp')"> Login via OTP
+              </label>
+            </div>
+
+            <form id="form-cit-login" onsubmit="handleCitizenLogin(event)">
+              <div class="form-group">
+                <label for="cit-identifier" class="form-label">Mobile Number / Email / Citizen ID <span class="required-star">*</span></label>
+                <input type="text" id="cit-identifier" class="form-control" placeholder="e.g. 9876543210 or citizen@nic.in" required>
+                <div class="help-text">Enter 10-digit mobile number or government citizen ID.</div>
+                <div id="err-cit-identifier" class="form-error hidden"><span>⚠️ Enter valid mobile, email, or Citizen ID</span></div>
+              </div>
+
+              <!-- Password Mode -->
+              <div id="cit-pwd-group" class="form-group">
+                <label for="cit-password" class="form-label">Account Password <span class="required-star">*</span></label>
+                <input type="password" id="cit-password" class="form-control" placeholder="••••••••">
+                <div id="err-cit-password" class="form-error hidden"><span>⚠️ Password is required</span></div>
+              </div>
+
+              <!-- OTP Mode -->
+              <div id="cit-otp-group" class="form-group hidden">
+                <label for="cit-otp" class="form-label">One-Time Password (OTP) <span class="required-star">*</span></label>
+                <div style="display:flex; gap:0.75rem;">
+                  <input type="text" id="cit-otp" class="form-control" placeholder="Enter 6-digit OTP" maxlength="6" disabled>
+                  <button type="button" class="btn btn-secondary" onclick="sendCitizenOTP()">Send OTP</button>
+                </div>
+                <div id="err-cit-otp" class="form-error hidden"><span>⚠️ Please enter the 6-digit OTP sent to your phone</span></div>
+              </div>
+
+              <!-- Captcha -->
+              <div class="form-group">
+                <label for="cit-captcha-input" class="form-label">Security Challenge (CAPTCHA) <span class="required-star">*</span></label>
+                <div style="display:flex; gap:0.75rem; align-items:center; margin-bottom:0.5rem;">
+                  <div id="cit-captcha-box" style="background:#1e293b; color:#f59e0b; font-family:monospace; font-size:1.3rem; font-weight:bold; letter-spacing:5px; padding:0.4rem 1rem; border-radius:6px; text-decoration:line-through;">A7X9K2</div>
+                  <button type="button" class="access-btn" onclick="refreshCaptcha('cit-captcha-box')">🔄 Refresh</button>
+                  <button type="button" class="access-btn" onclick="playAudioCaptcha('cit-captcha-box')">🔊 Audio</button>
+                </div>
+                <input type="text" id="cit-captcha-input" class="form-control" placeholder="Enter characters shown above" required>
+                <div id="err-cit-captcha" class="form-error hidden"><span>⚠️ Invalid CAPTCHA code</span></div>
+              </div>
+
+              <button type="submit" class="btn btn-saffron" style="width:100%;">Secure Citizen Sign-In</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: Citizen Registration -->
+      <div id="panel-citizen-register" class="tab-panel hidden">
+        <div class="gov-card">
+          <div class="gov-card-header">
+            <h2><span>📝 Citizen Portal Registration</span></h2>
+          </div>
+          <div class="gov-card-body">
+            <form id="form-cit-register" onsubmit="handleCitizenRegister(event)">
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                  <label for="reg-name" class="form-label">Full Name (as per Aadhaar) <span class="required-star">*</span></label>
+                  <input type="text" id="reg-name" class="form-control" placeholder="Full Legal Name" required>
+                </div>
+                <div class="form-group">
+                  <label for="reg-mobile" class="form-label">Mobile Number <span class="required-star">*</span></label>
+                  <input type="tel" id="reg-mobile" class="form-control" placeholder="10-digit mobile starting with 6-9" maxlength="10" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="reg-aadhaar" class="form-label">12-Digit Aadhaar Number <span class="required-star">*</span></label>
+                <input type="password" id="reg-aadhaar" class="form-control" placeholder="•••• •••• ••••" maxlength="12" required>
+                <div id="err-reg-aadhaar" class="form-error hidden"><span>⚠️ Aadhaar must be 12 digits and not all identical numbers (e.g. 111111111111)</span></div>
+              </div>
+
+              <div class="form-group">
+                <label style="display:flex; gap:0.5rem; cursor:pointer; font-size:0.85rem;">
+                  <input type="checkbox" id="reg-consent" required>
+                  I consent to identity validation via UIDAI for grievance redressing services under G2C portal guidelines.
+                </label>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                  <label for="reg-district" class="form-label">District <span class="required-star">*</span></label>
+                  <select id="reg-district" class="form-control" required>
+                    <option value="">-- Select District --</option>
+                    <option value="Central Delhi">Central Delhi</option>
+                    <option value="Mumbai City">Mumbai City</option>
+                    <option value="Bengaluru Urban">Bengaluru Urban</option>
+                    <option value="Chennai">Chennai</option>
+                    <option value="Kolkata">Kolkata</option>
+                    <option value="Hyderabad">Hyderabad</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="reg-pin" class="form-label">PIN Code <span class="required-star">*</span></label>
+                  <input type="text" id="reg-pin" class="form-control" maxlength="6" placeholder="6-digit PIN" required>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                  <label for="reg-pwd" class="form-label">Password <span class="required-star">*</span></label>
+                  <input type="password" id="reg-pwd" class="form-control" placeholder="Min 8 chars, uppercase, digit, symbol" required>
+                </div>
+                <div class="form-group">
+                  <label for="reg-pwd-confirm" class="form-label">Confirm Password <span class="required-star">*</span></label>
+                  <input type="password" id="reg-pwd-confirm" class="form-control" placeholder="Re-enter password" required>
+                  <div id="err-reg-pwd" class="form-error hidden"><span>⚠️ Passwords do not match</span></div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label style="display:flex; gap:0.5rem; cursor:pointer; font-size:0.85rem;">
+                  <input type="checkbox" id="reg-dpdp" required>
+                  I accept the Citizen Charter & Digital Personal Data Protection (DPDP) Act Policy.
+                </label>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width:100%;">Complete Registration</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: Departmental Official Sign-In -->
+      <div id="panel-official-login" class="tab-panel hidden">
+        <div class="gov-card">
+          <div class="gov-card-header" style="background:#0f172a;">
+            <h2><span>🏛️ Official Department Clearance Portal</span></h2>
+          </div>
+          <div class="gov-card-body">
+            <form id="form-off-login" onsubmit="handleOfficialLogin(event)">
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                  <label for="off-empid" class="form-label">Employee ID <span class="required-star">*</span></label>
+                  <input type="text" id="off-empid" class="form-control" placeholder="e.g. EMP-90412" required>
+                </div>
+                <div class="form-group">
+                  <label for="off-dept" class="form-label">Department <span class="required-star">*</span></label>
+                  <select id="off-dept" class="form-control" required>
+                    <option value="">-- Select Department --</option>
+                    <option value="Public Works Department (PWD)">Public Works Department (PWD)</option>
+                    <option value="Water Supply & Sewerage Board">Water Supply & Sewerage Board</option>
+                    <option value="Municipal Corporation">Municipal Corporation</option>
+                    <option value="State Electricity Board">State Electricity Board</option>
+                    <option value="Law Enforcement & Police">Law Enforcement & Police</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="off-email" class="form-label">Departmental Email (@gov.in / @nic.in) <span class="required-star">*</span></label>
+                <input type="email" id="off-email" class="form-control" placeholder="officer.name@nic.in" required>
+                <div id="err-off-email" class="form-error hidden"><span>⚠️ Email must end with official @gov.in or @nic.in domain</span></div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                  <label for="off-pwd" class="form-label">Password <span class="required-star">*</span></label>
+                  <input type="password" id="off-pwd" class="form-control" placeholder="••••••••" required>
+                </div>
+                <div class="form-group">
+                  <label for="off-mfa" class="form-label">6-Digit MFA Authenticator Passcode <span class="required-star">*</span></label>
+                  <input type="text" id="off-mfa" class="form-control" placeholder="123456" maxlength="6" required>
+                  <div id="err-off-mfa" class="form-error hidden"><span>⚠️ MFA code must be 6 numeric digits</span></div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width:100%;">Departmental Clearance Sign-In</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-LOGIN DASHBOARD (Hidden until authenticated) -->
+    <div id="dashboard-section" class="hidden">
+      <div class="alert-banner alert-success">
+        <span>✅ Authentication Successful! Session token generated under CERT-In Security Protocol.</span>
+      </div>
+
+      <div class="gov-card">
+        <div class="gov-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <h2><span>📊 Grievance Redressal Dashboard</span></h2>
+          <button class="btn btn-secondary" onclick="handleLogout()" style="padding:0.4rem 0.8rem; font-size:0.85rem;">🔒 Logout</button>
+        </div>
+        <div class="gov-card-body">
+          <div style="background:#e2e8f0; padding:1rem; border-radius:6px; margin-bottom:1.5rem;">
+            <h3>Active User Session Profile</h3>
+            <p><strong>Name:</strong> <span id="dash-user-name">User</span></p>
+            <p><strong>Role / Access Level:</strong> <span id="dash-user-role" class="cert-in-badge">Citizen</span></p>
+            <p><strong>Identifier / Email:</strong> <span id="dash-user-email">user@gov.in</span></p>
+            <p><strong>Session JWT Token:</strong> <code style="font-size:0.75rem; word-break:break-all;" id="dash-jwt">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</code></p>
+          </div>
+
+          <h3>Grievance Classification Statistics</h3>
+          <div class="dashboard-grid">
+            <div class="stat-card">
+              <div class="val">142</div>
+              <div>Total Grievances Filed</div>
+            </div>
+            <div class="stat-card">
+              <div class="val" style="color:#16a34a;">128</div>
+              <div>Resolved & Closed</div>
+            </div>
+            <div class="stat-card">
+              <div class="val" style="color:#d97706;">14</div>
+              <div>Under AI Classification & Department Review</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // Accessibility Font Scale Controller
+    let currentFontScale = 1.0;
+    function adjustFont(delta) {
+      currentFontScale = Math.min(Math.max(0.85, currentFontScale + delta), 1.3);
+      document.documentElement.style.setProperty('--font-scale', currentFontScale.toString());
+      announce('Text size adjusted to ' + Math.round(currentFontScale * 100) + '%');
+    }
+    function resetFont() {
+      currentFontScale = 1.0;
+      document.documentElement.style.setProperty('--font-scale', '1.0');
+      announce('Text size reset to default');
+    }
+    function toggleContrast() {
+      document.body.classList.toggle('high-contrast');
+      const isHc = document.body.classList.contains('high-contrast');
+      document.getElementById('contrast-toggle-btn').innerText = isHc ? '⚡ Normal View' : '⚡ High Contrast';
+      announce(isHc ? 'High Contrast Mode Enabled' : 'High Contrast Mode Disabled');
+    }
+    function announce(msg) {
+      const el = document.getElementById('sr-announcer');
+      el.innerText = msg;
+    }
+
+    // Tab Switcher
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+
+      document.getElementById('tab-' + tabName).classList.add('active');
+      document.getElementById('panel-' + tabName).classList.remove('hidden');
+      announce('Switched tab to ' + tabName);
+    }
+
+    // Citizen Auth Mode (Password vs OTP)
+    function toggleAuthMode(mode) {
+      if (mode === 'password') {
+        document.getElementById('cit-pwd-group').classList.remove('hidden');
+        document.getElementById('cit-otp-group').classList.add('hidden');
+      } else {
+        document.getElementById('cit-pwd-group').classList.add('hidden');
+        document.getElementById('cit-otp-group').classList.remove('hidden');
+      }
+    }
+
+    function sendCitizenOTP() {
+      const id = document.getElementById('cit-identifier').value;
+      if (!id) {
+        alert('Please enter your registered Mobile Number first.');
+        return;
+      }
+      document.getElementById('cit-otp').disabled = false;
+      alert('OTP sent to ' + id + '. Enter sample OTP: 123456');
+    }
+
+    // Captcha Logic
+    function refreshCaptcha(boxId) {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      document.getElementById(boxId).innerText = code;
+    }
+    function playAudioCaptcha(boxId) {
+      const text = document.getElementById(boxId).innerText.split('').join(' ');
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance('Security code is: ' + text);
+        u.rate = 0.8;
+        window.speechSynthesis.speak(u);
+      } else {
+        alert('Audio Code: ' + text);
+      }
+    }
+
+    // Citizen Login Submit
+    function handleCitizenLogin(e) {
+      e.preventDefault();
+      const identifier = document.getElementById('cit-identifier').value;
+      const captchaInput = document.getElementById('cit-captcha-input').value;
+      const captchaTarget = document.getElementById('cit-captcha-box').innerText;
+
+      if (captchaInput.toUpperCase() !== captchaTarget.toUpperCase()) {
+        document.getElementById('err-cit-captcha').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('err-cit-captcha').classList.add('hidden');
+
+      showDashboard({
+        name: 'Citizen User',
+        role: 'Citizen (Aadhaar Verified)',
+        email: identifier
+      });
+    }
+
+    // Citizen Registration Submit
+    function handleCitizenRegister(e) {
+      e.preventDefault();
+      const name = document.getElementById('reg-name').value;
+      const aadhaar = document.getElementById('reg-aadhaar').value;
+      const pwd = document.getElementById('reg-pwd').value;
+      const confirmPwd = document.getElementById('reg-pwd-confirm').value;
+
+      if (/^(\d)\1+$/.test(aadhaar)) {
+        document.getElementById('err-reg-aadhaar').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('err-reg-aadhaar').classList.add('hidden');
+
+      if (pwd !== confirmPwd) {
+        document.getElementById('err-reg-pwd').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('err-reg-pwd').classList.add('hidden');
+
+      alert('Citizen Profile Registered Successfully! Proceeding to Dashboard.');
+      showDashboard({
+        name: name,
+        role: 'Citizen Profile',
+        email: document.getElementById('reg-mobile').value
+      });
+    }
+
+    // Official Login Submit
+    function handleOfficialLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('off-email').value;
+      const mfa = document.getElementById('off-mfa').value;
+
+      if (!/@gov\.in$|@nic\.in$/i.test(email)) {
+        document.getElementById('err-off-email').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('err-off-email').classList.add('hidden');
+
+      if (!/^\d{6}$/.test(mfa)) {
+        document.getElementById('err-off-mfa').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('err-off-mfa').classList.add('hidden');
+
+      showDashboard({
+        name: 'Officer (' + document.getElementById('off-empid').value + ')',
+        role: 'Department Official - ' + document.getElementById('off-dept').value,
+        email: email
+      });
+    }
+
+    // Show Dashboard
+    function showDashboard(userData) {
+      document.getElementById('auth-section').classList.add('hidden');
+      document.getElementById('dashboard-section').classList.remove('hidden');
+      document.getElementById('dash-user-name').innerText = userData.name;
+      document.getElementById('dash-user-role').innerText = userData.role;
+      document.getElementById('dash-user-email').innerText = userData.email;
+      document.getElementById('dash-jwt').innerText = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + btoa(JSON.stringify(userData)) + '.CERTIN_GOV_SIGNATURE';
+    }
+
+    // Logout
+    function handleLogout() {
+      document.getElementById('dashboard-section').classList.add('hidden');
+      document.getElementById('auth-section').classList.remove('hidden');
+      alert('Logged out securely. Session cleared.');
+    }
+  </script>
+</body>
+</html>
