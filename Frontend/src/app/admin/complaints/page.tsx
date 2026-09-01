@@ -21,13 +21,13 @@ export default function ComplaintsPage() {
         });
     }, []);
 
-    if (isLoading) return <div className="p-8 animate-pulse text-gray-500">Loading complaints...</div>;
+    if (isLoading) return <div className="p-8 animate-pulse text-gray-500">Loading reports...</div>;
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-12">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight text-gray-900">All Reports</h1>
-                <p className="text-gray-500 mt-2 text-lg">Raw complaint tracking natively parsed by Nagrik AI.</p>
+                <p className="text-gray-500 mt-2 text-lg">Raw report tracking natively parsed by Nagrik AI.</p>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
