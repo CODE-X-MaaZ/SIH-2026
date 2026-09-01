@@ -1,0 +1,2302 @@
+Below is a **complete, step‑by‑step, 3‑hour plan** to build the **Nagrik Radar backend** exactly as per your `Nagrik_Radar_DESIGN-1.md`, split between **2 people**, with **every command, file, and code snippet** you need.
+
+This assumes:
+- You have **GitHub repo** already created.
+- You have **VS Code open** with that repo.
+- You have **Python 3.10+** installed.
+- You are building a **prototype** (SQLite is fine; can swap to PostgreSQL later).
+
+***
+
+# 🎯 GOAL
+
+Build a working backend that supports:
+
+✅ Citizen complaint submission (text/voice transcript)  
+✅ AI analysis (language, category, priority, confidence)  
+✅ Tracking ID generation  
+✅ Related/duplicate complaint detection  
+✅ Incident creation & evidence  
+✅ Dashboard overview  
+✅ Map/hotspot data (GeoJSON)  
+✅ Resolution & “possibly unresolved” detection  
+✅ Analytics  
+
+All via REST APIs that match the **frontend contract** in your design doc. citefile:1
+
+***
+
+# 👥 TEAM DIVISION (2 PEOPLE)
+
+## Person A: **Complaint + AI Pipeline**
+
+Owns:
+- `app/ai.py`
+- `app/models.py`
+- `app/schemas.py`
+- `app/routers/complaints.py`
+- `app/routers/ai.py`
+- `seed.py` (departments + demo complaints)
+
+Responsible for:
+1. Complaint submission endpoint
+2. AI analysis (language, category, priority, embedding)
+3. Tracking ID generation
+4. Duplicate/related complaint detection
+5. Complaint status updates
+6. Seeding demo data
+
+## Person B: **Incident + Authority Dashboard**
+
+Owns:
+- `app/routers/incidents.py`
+- `app/routers/dashboard.py`
+- `app/routers/maps.py`
+- `app/routers/resolution.py`
+- `app/routers/analytics.py`
+- `app/main.py` (final assembly)
+
+Responsible for:
+1. Incident listing, detail, evidence, growth
+2. Dashboard overview (metrics + needs attention)
+3. Map endpoints (complaints, incidents, hotspots)
+4. Resolution + possibly-unresolved detection
+5. Analytics
+6. Final app assembly and testing
+
+***
+
+# ⏱ 3-HOUR TIMELINE
+
+| Time | Person A | Person B |
+|------|----------|----------|
+| **0:00–0:15** | Project setup, venv, install deps, folder structure | Same (sync on calls) |
+| **0:15–0:45** | `database.py`, `models.py`, `schemas.py` | Wait, then review |
+| **0:45–1:30** | `ai.py`, `complaints.py`, `ai.py` router | Start `incidents.py` |
+| **1:30–2:15** | `seed.py`, test complaint flow | `dashboard.py`, `maps.py` |
+| **2:15–2:45** | Fix bugs, test related complaints | `resolution.py`, `analytics.py` |
+| **2:45–3:00** | Merge branches, final test, demo run | Merge, final test, demo run |
+
+***
+
+# 🚀 STEP-BY-STEP IMPLEMENTATION
+
+## STEP 1: Project Setup (Both, 15 mins)
+
+### 1.1 Create Virtual Environment
+
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**macOS/Linux:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 1.2 Install Dependencies
+
+```bash
+pip install fastapi uvicorn sqlalchemy pydantic python-multipart numpy scikit-learn sentence-transformers langdetect
+```
+
+### 1.3 Save Requirements
+
+```bash
+pip freeze > requirements.txt
+```
+
+### 1.4 Create Folder Structure
+
+```bash
+mkdir app
+mkdir app/routers
+```
+
+### 1.5 Create Empty Files
+
+Create these files (right-click → New File in VS Code):
+
+```text
+app/__init__.py
+app/main.py
+app/database.py
+app/models.py
+app/schemas.py
+app/ai.py
+app/routers/__init__.py
+app/routers/complaints.py
+app/routers/ai.py
+app/routers/incidents.py
+app/routers/dashboard.py
+app/routers/maps.py
+app/routers/resolution.py
+app/routers/analytics.py
+seed.py
+```
+
+### 1.6 Git Branches
+
+**Person A:**
+```bash
+git checkout -b backend-person-a
+```
+
+**Person B:**
+```bash
+git checkout -b backend-person-b
+```
+
+***
+
+## STEP 2: Database Configuration (Person A, 15 mins)
+
+### 2.1 `app/database.py`
+
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+DATABASE_URL = "sqlite:///./nagrik_radar.db"
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+Base = declarative_base()
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+***
+
+## STEP 3: Database Models (Person A, 30 mins)
+
+### 3.1 `app/models.py`
+
+Copy this entire file:
+
+```python
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.orm import relationship
+
+from .database import Base
+
+
+class Department(Base):
+    __tablename__ = "departments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True, nullable=False)
+    name = Column(String(150), nullable=False)
+
+    complaints = relationship("Complaint", back_populates="department")
+    incidents = relationship("Incident", back_populates="department")
+
+
+class Complaint(Base):
+    __tablename__ = "complaints"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tracking_id = Column(String(30), unique=True, index=True, nullable=False)
+
+    original_text = Column(Text, nullable=False)
+    normalized_text = Column(Text, nullable=False)
+    detected_language = Column(String(20), default="en")
+
+    category = Column(String(100), nullable=True)
+    category_label = Column(String(150), nullable=True)
+    subcategory = Column(String(150), nullable=True)
+
+    priority = Column(String(30), default="medium")
+    priority_score = Column(Float, default=0.0)
+    ai_confidence = Column(Float, default=0.0)
+
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    display_name = Column(String(255), nullable=True)
+
+    embedding = Column(Text, nullable=True)
+
+    status = Column(String(40), default="submitted")
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
+
+    is_duplicate = Column(Boolean, default=False)
+    duplicate_of_id = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    department = relationship("Department", back_populates="complaints")
+    incident = relationship("Incident", back_populates="complaints")
+    events = relationship(
+        "ComplaintEvent",
+        back_populates="complaint",
+        cascade="all, delete-orphan"
+    )
+
+
+class ComplaintEvent(Base):
+    __tablename__ = "complaint_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    complaint_id = Column(
+        Integer,
+        ForeignKey("complaints.id"),
+        nullable=False
+    )
+
+    old_status = Column(String(40), nullable=True)
+    new_status = Column(String(40), nullable=False)
+    remark = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    complaint = relationship("Complaint", back_populates="events")
+
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    title = Column(String(255), nullable=False)
+    category = Column(String(100), nullable=False)
+    status = Column(String(40), default="emerging")
+    priority = Column(String(30), default="medium")
+
+    department_id = Column(Integer, ForeignKey("departments.id"))
+
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    display_name = Column(String(255), nullable=True)
+
+    report_count = Column(Integer, default=0)
+    baseline_count = Column(Integer, default=1)
+    growth_multiplier = Column(Float, default=1.0)
+    ai_confidence = Column(Float, default=0.0)
+
+    detected_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    department = relationship("Department", back_populates="incidents")
+    complaints = relationship("Complaint", back_populates="incident")
+    evidence = relationship(
+        "IncidentEvidence",
+        back_populates="incident",
+        cascade="all, delete-orphan"
+    )
+
+
+class IncidentEvidence(Base):
+    __tablename__ = "incident_evidence"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(
+        Integer,
+        ForeignKey("incidents.id"),
+        nullable=False
+    )
+
+    evidence_type = Column(String(50), nullable=False)
+    label = Column(String(255), nullable=False)
+    score = Column(Float, default=0.0)
+
+    incident = relationship("Incident", back_populates="evidence")
+```
+
+***
+
+## STEP 4: Pydantic Schemas (Person A, 20 mins)
+
+### 4.1 `app/schemas.py`
+
+```python
+from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class LocationInput(BaseModel):
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    display_name: Optional[str] = None
+
+
+class ComplaintCreate(BaseModel):
+    original_text: str = Field(..., min_length=5, max_length=5000)
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    display_name: Optional[str] = None
+
+
+class AIAnalysisRequest(BaseModel):
+    text: str = Field(..., min_length=5, max_length=5000)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class AIAnalysisResponse(BaseModel):
+    language: str
+    normalized_text: str
+    category: Optional[str]
+    category_label: Optional[str]
+    priority: str
+    priority_score: float
+    confidence: float
+
+
+class ComplaintResponse(BaseModel):
+    complaint_id: int
+    tracking_id: str
+    original_text: str
+    normalized_text: str
+    detected_language: str
+    category: Optional[str]
+    category_label: Optional[str]
+    subcategory: Optional[str]
+    priority: str
+    priority_score: float
+    location: LocationInput
+    confidence: float
+    status: str
+    incident_id: Optional[int]
+    is_duplicate: bool
+    duplicate_of_id: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class StatusUpdate(BaseModel):
+    status: str
+    remark: Optional[str] = None
+
+
+class ComplaintEventResponse(BaseModel):
+    old_status: Optional[str]
+    new_status: str
+    remark: Optional[str]
+    created_at: datetime
+
+
+class RelatedComplaint(BaseModel):
+    complaint_id: int
+    tracking_id: str
+    similarity: float
+    distance_meters: Optional[float]
+    time_difference_minutes: Optional[float]
+    original_text: str
+
+
+class RelatedComplaintsResponse(BaseModel):
+    complaint_id: int
+    related_complaints: List[RelatedComplaint]
+    correlation: dict
+
+
+class IncidentResponse(BaseModel):
+    id: int
+    title: str
+    category: str
+    status: str
+    priority: str
+    report_count: int
+    baseline_count: int
+    growth_multiplier: float
+    ai_confidence: float
+    location: LocationInput
+    department: Optional[str]
+    detected_at: datetime
+
+    class Config:
+        from_attributes = True
+```
+
+***
+
+## STEP 5: AI Services (Person A, 45 mins)
+
+### 5.1 `app/ai.py`
+
+```python
+import json
+import re
+from functools import lru_cache
+from typing import Optional
+
+import numpy as np
+from langdetect import detect, LangDetectException
+from sentence_transformers import SentenceTransformer
+
+
+CATEGORY_RULES = {
+    "water_supply": {
+        "label": "Water Supply",
+        "department": "WATER",
+        "keywords": [
+            "water",
+            "paani",
+            "पानी",
+            "pipeline",
+            "leak",
+            "leakage",
+            "supply",
+            "sewage",
+            "drain",
+            "नल",
+        ],
+    },
+    "road_damage": {
+        "label": "Road Damage",
+        "department": "ROADS",
+        "keywords": [
+            "road",
+            "सड़क",
+            "sadak",
+            "pothole",
+            "गड्ढा",
+            "footpath",
+            "bridge",
+            "pavement",
+        ],
+    },
+    "electricity": {
+        "label": "Electricity",
+        "department": "ELECTRICITY",
+        "keywords": [
+            "electricity",
+            "बिजली",
+            "bijli",
+            "power",
+            "light",
+            "transformer",
+            "wire",
+            "outage",
+        ],
+    },
+    "garbage": {
+        "label": "Garbage and Sanitation",
+        "department": "SANITATION",
+        "keywords": [
+            "garbage",
+            "कचरा",
+            "kachra",
+            "waste",
+            "dustbin",
+            "dirty",
+            "sanitation",
+        ],
+    },
+}
+
+
+URGENCY_RULES = {
+    "critical": [
+        "fire",
+        "आग",
+        "accident",
+        "दुर्घटना",
+        "collapse",
+        "danger",
+        "hospital",
+        "electrocution",
+        "life threatening",
+    ],
+    "high": [
+        "flood",
+        "बाढ़",
+        "no water",
+        "no power",
+        "major",
+        "overflow",
+        "emergency",
+        "unsafe",
+    ],
+    "medium": [
+        "broken",
+        "leak",
+        "not working",
+        "delay",
+        "damaged",
+    ],
+}
+
+
+@lru_cache(maxsize=1)
+def get_embedding_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+
+def detect_language(text: str) -> str:
+    try:
+        return detect(text)
+    except LangDetectException:
+        return "unknown"
+
+
+def normalize_text(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def create_embedding(text: str) -> list[float]:
+    model = get_embedding_model()
+    vector = model.encode(text, normalize_embeddings=True)
+    return vector.tolist()
+
+
+def cosine_similarity(first: list[float], second: list[float]) -> float:
+    a = np.array(first, dtype=float)
+    b = np.array(second, dtype=float)
+
+    denominator = np.linalg.norm(a) * np.linalg.norm(b)
+
+    if denominator == 0:
+        return 0.0
+
+    return float(np.dot(a, b) / denominator)
+
+
+def classify_text(text: str) -> dict:
+    best_category: Optional[str] = None
+    best_score = 0
+
+    for category, rule in CATEGORY_RULES.items():
+        score = sum(
+            1 for keyword in rule["keywords"]
+            if keyword.lower() in text
+        )
+
+        if score > best_score:
+            best_score = score
+            best_category = category
+
+    if best_category is None:
+        return {
+            "category": "other",
+            "category_label": "Other Civic Issue",
+            "department": None,
+            "subcategory": None,
+            "confidence": 0.45,
+        }
+
+    rule = CATEGORY_RULES[best_category]
+    confidence = min(0.98, 0.60 + best_score * 0.10)
+
+    return {
+        "category": best_category,
+        "category_label": rule["label"],
+        "department": rule["department"],
+        "subcategory": None,
+        "confidence": round(confidence, 2),
+    }
+
+
+def calculate_priority(text: str, category: Optional[str]) -> dict:
+    score = 20
+
+    for level, keywords in URGENCY_RULES.items():
+        matches = sum(1 for keyword in keywords if keyword in text)
+
+        if level == "critical":
+            score += matches * 25
+        elif level == "high":
+            score += matches * 15
+        elif level == "medium":
+            score += matches * 8
+
+    if category in ["water_supply", "electricity"]:
+        score += 8
+
+    score = min(score, 100)
+
+    if score >= 75:
+        priority = "critical"
+    elif score >= 55:
+        priority = "high"
+    elif score >= 35:
+        priority = "medium"
+    else:
+        priority = "low"
+
+    return {
+        "priority": priority,
+        "priority_score": score,
+    }
+
+
+def analyze_text(text: str) -> dict:
+    normalized = normalize_text(text)
+    language = detect_language(text)
+    classification = classify_text(normalized)
+    priority = calculate_priority(
+        normalized,
+        classification["category"]
+    )
+
+    return {
+        "language": language,
+        "normalized_text": normalized,
+        **classification,
+        **priority,
+    }
+
+
+def embedding_to_json(embedding: list[float]) -> str:
+    return json.dumps(embedding)
+
+
+def embedding_from_json(value: Optional[str]) -> Optional[list[float]]:
+    if not value:
+        return None
+    return json.loads(value)
+
+
+def calculate_distance_meters(
+    latitude_1: Optional[float],
+    longitude_1: Optional[float],
+    latitude_2: Optional[float],
+    longitude_2: Optional[float],
+) -> Optional[float]:
+    if None in (
+        latitude_1,
+        longitude_1,
+        latitude_2,
+        longitude_2,
+    ):
+        return None
+
+    lat_distance = (latitude_1 - latitude_2) * 111_000
+    lon_distance = (
+        (longitude_1 - longitude_2)
+        * 111_000
+        * np.cos(np.radians(latitude_1))
+    )
+
+    return round(
+        float(np.sqrt(lat_distance**2 + lon_distance**2)),
+        2,
+    )
+```
+
+***
+
+## STEP 6: Complaint Router (Person A, 45 mins)
+
+### 6.1 `app/routers/complaints.py`
+
+```python
+import json
+import secrets
+import string
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from ..ai import (
+    calculate_distance_meters,
+    cosine_similarity,
+    create_embedding,
+    embedding_from_json,
+    embedding_to_json,
+)
+from ..ai import analyze_text
+from ..database import get_db
+from ..models import Complaint, ComplaintEvent, Department, Incident
+from ..schemas import (
+    ComplaintCreate,
+    ComplaintEventResponse,
+    ComplaintResponse,
+    RelatedComplaint,
+    RelatedComplaintsResponse,
+    StatusUpdate,
+)
+
+router = APIRouter(prefix="/api/complaints", tags=["Complaints"])
+
+
+def create_tracking_id() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    code = "".join(secrets.choice(alphabet) for _ in range(5))
+    return f"NR-{code}"
+
+
+def complaint_to_response(complaint: Complaint) -> dict:
+    return {
+        "complaint_id": complaint.id,
+        "tracking_id": complaint.tracking_id,
+        "original_text": complaint.original_text,
+        "normalized_text": complaint.normalized_text,
+        "detected_language": complaint.detected_language,
+        "category": complaint.category,
+        "category_label": complaint.category_label,
+        "subcategory": complaint.subcategory,
+        "priority": complaint.priority,
+        "priority_score": complaint.priority_score,
+        "location": {
+            "latitude": complaint.latitude,
+            "longitude": complaint.longitude,
+            "display_name": complaint.display_name,
+        },
+        "confidence": complaint.ai_confidence,
+        "status": complaint.status,
+        "incident_id": complaint.incident_id,
+        "is_duplicate": complaint.is_duplicate,
+        "duplicate_of_id": complaint.duplicate_of_id,
+        "created_at": complaint.created_at,
+    }
+
+
+def find_related_complaint(
+    db: Session,
+    embedding: list[float],
+    latitude: float | None,
+    longitude: float | None,
+    category: str | None,
+    current_id: int | None = None,
+):
+    complaints = (
+        db.query(Complaint)
+        .filter(Complaint.embedding.isnot(None))
+        .all()
+    )
+
+    best = None
+
+    for complaint in complaints:
+        if current_id and complaint.id == current_id:
+            continue
+
+        if category and complaint.category != category:
+            continue
+
+        old_embedding = embedding_from_json(complaint.embedding)
+
+        if not old_embedding:
+            continue
+
+        similarity = cosine_similarity(embedding, old_embedding)
+
+        distance = calculate_distance_meters(
+            latitude,
+            longitude,
+            complaint.latitude,
+            complaint.longitude,
+        )
+
+        if distance is not None and distance > 2_000:
+            continue
+
+        if similarity >= 0.82:
+            if best is None or similarity > best["similarity"]:
+                best = {
+                    "complaint": complaint,
+                    "similarity": similarity,
+                    "distance": distance,
+                }
+
+    return best
+
+
+@router.post("", response_model=ComplaintResponse)
+def create_complaint(
+    payload: ComplaintCreate,
+    db: Session = Depends(get_db),
+):
+    analysis = analyze_text(payload.original_text)
+    embedding = create_embedding(analysis["normalized_text"])
+
+    department = None
+
+    if analysis["department"]:
+        department = (
+            db.query(Department)
+            .filter(
+                Department.code == analysis["department"]
+            )
+            .first()
+        )
+
+    related = find_related_complaint(
+        db=db,
+        embedding=embedding,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        category=analysis["category"],
+    )
+
+    tracking_id = create_tracking_id()
+
+    complaint = Complaint(
+        tracking_id=tracking_id,
+        original_text=payload.original_text,
+        normalized_text=analysis["normalized_text"],
+        detected_language=analysis["language"],
+        category=analysis["category"],
+        category_label=analysis["category_label"],
+        subcategory=analysis["subcategory"],
+        priority=analysis["priority"],
+        priority_score=analysis["priority_score"],
+        ai_confidence=analysis["confidence"],
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        display_name=payload.display_name,
+        embedding=embedding_to_json(embedding),
+        department_id=department.id if department else None,
+        status="submitted",
+        is_duplicate=related is not None,
+        duplicate_of_id=(
+            related["complaint"].id
+            if related
+            else None
+        ),
+    )
+
+    db.add(complaint)
+    db.commit()
+    db.refresh(complaint)
+
+    event = ComplaintEvent(
+        complaint_id=complaint.id,
+        old_status=None,
+        new_status="submitted",
+        remark="Complaint submitted by citizen",
+    )
+
+    db.add(event)
+    db.commit()
+
+    return complaint_to_response(complaint)
+
+
+@router.get("/{complaint_id}", response_model=ComplaintResponse)
+def get_complaint(
+    complaint_id: int,
+    db: Session = Depends(get_db),
+):
+    complaint = (
+        db.query(Complaint)
+        .filter(Complaint.id == complaint_id)
+        .first()
+    )
+
+    if not complaint:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint not found",
+        )
+
+    return complaint_to_response(complaint)
+
+
+@router.get(
+    "/track/{tracking_id}",
+    response_model=ComplaintResponse,
+)
+def track_complaint(
+    tracking_id: str,
+    db: Session = Depends(get_db),
+):
+    complaint = (
+        db.query(Complaint)
+        .filter(
+            Complaint.tracking_id == tracking_id.upper()
+        )
+        .first()
+    )
+
+    if not complaint:
+        raise HTTPException(
+            status_code=404,
+            detail="Tracking ID not found",
+        )
+
+    return complaint_to_response(complaint)
+
+
+@router.get("", response_model=list[ComplaintResponse])
+def list_complaints(
+    status: str | None = None,
+    category: str | None = None,
+    priority: str | None = None,
+    limit: int = Query(default=50, le=100),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Complaint)
+
+    if status:
+        query = query.filter(Complaint.status == status)
+
+    if category:
+        query = query.filter(Complaint.category == category)
+
+    if priority:
+        query = query.filter(Complaint.priority == priority)
+
+    complaints = (
+        query
+        .order_by(Complaint.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        complaint_to_response(complaint)
+        for complaint in complaints
+    ]
+
+
+@router.patch(
+    "/{complaint_id}/status",
+    response_model=ComplaintResponse,
+)
+def update_complaint_status(
+    complaint_id: int,
+    payload: StatusUpdate,
+    db: Session = Depends(get_db),
+):
+    allowed = {
+        "submitted",
+        "classified",
+        "investigating",
+        "assigned",
+        "action_in_progress",
+        "resolved",
+        "possibly_unresolved",
+        "reopened",
+    }
+
+    if payload.status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Allowed values: {sorted(allowed)}",
+        )
+
+    complaint = (
+        db.query(Complaint)
+        .filter(Complaint.id == complaint_id)
+        .first()
+    )
+
+    if not complaint:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint not found",
+        )
+
+    old_status = complaint.status
+    complaint.status = payload.status
+
+    event = ComplaintEvent(
+        complaint_id=complaint.id,
+        old_status=old_status,
+        new_status=payload.status,
+        remark=payload.remark,
+    )
+
+    db.add(event)
+    db.commit()
+    db.refresh(complaint)
+
+    return complaint_to_response(complaint)
+
+
+@router.get(
+    "/{complaint_id}/events",
+    response_model=list[ComplaintEventResponse],
+)
+def complaint_events(
+    complaint_id: int,
+    db: Session = Depends(get_db),
+):
+    complaint = (
+        db.query(Complaint)
+        .filter(Complaint.id == complaint_id)
+        .first()
+    )
+
+    if not complaint:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint not found",
+        )
+
+    return complaint.events
+
+
+@router.get(
+    "/{complaint_id}/related",
+    response_model=RelatedComplaintsResponse,
+)
+def related_complaints(
+    complaint_id: int,
+    db: Session = Depends(get_db),
+):
+    complaint = (
+        db.query(Complaint)
+        .filter(Complaint.id == complaint_id)
+        .first()
+    )
+
+    if not complaint:
+        raise HTTPException(
+            status_code=404,
+            detail="Complaint not found",
+        )
+
+    current_embedding = embedding_from_json(complaint.embedding)
+
+    if not current_embedding:
+        return {
+            "complaint_id": complaint.id,
+            "related_complaints": [],
+            "correlation": {
+                "semantic_score": 0,
+                "geographic_score": 0,
+                "temporal_score": 0,
+            },
+        }
+
+    related_reports = []
+
+    for other in (
+        db.query(Complaint)
+        .filter(
+            Complaint.id != complaint.id,
+            Complaint.embedding.isnot(None),
+            Complaint.category == complaint.category,
+        )
+        .all()
+    ):
+        other_embedding = embedding_from_json(other.embedding)
+
+        similarity = cosine_similarity(
+            current_embedding,
+            other_embedding,
+        )
+
+        if similarity < 0.70:
+            continue
+
+        distance = calculate_distance_meters(
+            complaint.latitude,
+            complaint.longitude,
+            other.latitude,
+            other.longitude,
+        )
+
+        time_difference = abs(
+            (
+                complaint.created_at - other.created_at
+            ).total_seconds()
+        ) / 60
+
+        related_reports.append(
+            RelatedComplaint(
+                complaint_id=other.id,
+                tracking_id=other.tracking_id,
+                similarity=round(similarity, 2),
+                distance_meters=distance,
+                time_difference_minutes=round(
+                    time_difference,
+                    2,
+                ),
+                original_text=other.original_text,
+            )
+        )
+
+    related_reports.sort(
+        key=lambda item: item.similarity,
+        reverse=True,
+    )
+
+    return {
+        "complaint_id": complaint.id,
+        "related_complaints": related_reports[:20],
+        "correlation": {
+            "semantic_score": (
+                related_reports[0].similarity
+                if related_reports
+                else 0
+            ),
+            "geographic_score": 0.90,
+            "temporal_score": 0.90,
+        },
+    }
+```
+
+***
+
+## STEP 7: AI Router (Person A, 15 mins)
+
+### 7.1 `app/routers/ai.py`
+
+```python
+from fastapi import APIRouter
+
+from ..ai import analyze_text
+from ..schemas import AIAnalysisRequest, AIAnalysisResponse
+
+router = APIRouter(prefix="/api/ai", tags=["AI"])
+
+
+@router.post(
+    "/analyze",
+    response_model=AIAnalysisResponse,
+)
+def analyze_complaint(payload: AIAnalysisRequest):
+    return analyze_text(payload.text)
+```
+
+***
+
+## STEP 8: Incident Router (Person B, 45 mins)
+
+### 8.1 `app/routers/incidents.py`
+
+```python
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models import Complaint, Incident, IncidentEvidence
+from ..schemas import IncidentResponse, LocationInput
+
+router = APIRouter(prefix="/api/incidents", tags=["Incidents"])
+
+
+def incident_response(incident: Incident) -> dict:
+    department_name = None
+
+    if incident.department:
+        department_name = incident.department.name
+
+    return {
+        "id": incident.id,
+        "title": incident.title,
+        "category": incident.category,
+        "status": incident.status,
+        "priority": incident.priority,
+        "report_count": incident.report_count,
+        "baseline_count": incident.baseline_count,
+        "growth_multiplier": incident.growth_multiplier,
+        "ai_confidence": incident.ai_confidence,
+        "location": {
+            "latitude": incident.latitude,
+            "longitude": incident.longitude,
+            "display_name": incident.display_name,
+        },
+        "department": department_name,
+        "detected_at": incident.detected_at,
+    }
+
+
+@router.get("", response_model=list[IncidentResponse])
+def list_incidents(
+    status: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Incident)
+
+    if status:
+        query = query.filter(Incident.status == status)
+
+    if priority:
+        query = query.filter(Incident.priority == priority)
+
+    if category:
+        query = query.filter(Incident.category == category)
+
+    incidents = (
+        query
+        .order_by(Incident.report_count.desc())
+        .all()
+    )
+
+    return [
+        incident_response(incident)
+        for incident in incidents
+    ]
+
+
+@router.get("/{incident_id}", response_model=IncidentResponse)
+def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    return incident_response(incident)
+
+
+@router.get("/{incident_id}/reports")
+def incident_reports(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    complaints = (
+        db.query(Complaint)
+        .filter(Complaint.incident_id == incident_id)
+        .order_by(Complaint.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "complaint_id": complaint.id,
+            "tracking_id": complaint.tracking_id,
+            "text": complaint.original_text,
+            "category": complaint.category,
+            "priority": complaint.priority,
+            "status": complaint.status,
+            "latitude": complaint.latitude,
+            "longitude": complaint.longitude,
+            "created_at": complaint.created_at,
+        }
+        for complaint in complaints
+    ]
+
+
+@router.get("/{incident_id}/evidence")
+def incident_evidence(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    return {
+        "incident_id": incident.id,
+        "evidence": [
+            {
+                "type": item.evidence_type,
+                "label": item.label,
+                "score": item.score,
+            }
+            for item in incident.evidence
+        ],
+        "explanation": (
+            "These reports are likely related because they "
+            "describe a similar issue and are concentrated "
+            "in the same geographic area."
+        ),
+    }
+
+
+@router.get("/{incident_id}/growth")
+def incident_growth(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    complaints = (
+        db.query(Complaint)
+        .filter(Complaint.incident_id == incident_id)
+        .order_by(Complaint.created_at.asc())
+        .all()
+    )
+
+    buckets = {}
+
+    for complaint in complaints:
+        timestamp = complaint.created_at.replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+        key = timestamp.isoformat()
+        buckets[key] = buckets.get(key, 0) + 1
+
+    points = [
+        {
+            "timestamp": timestamp,
+            "count": count,
+        }
+        for timestamp, count in buckets.items()
+    ]
+
+    return {
+        "incident_id": incident.id,
+        "baseline": incident.baseline_count,
+        "current": incident.report_count,
+        "growth_multiplier": incident.growth_multiplier,
+        "points": points,
+    }
+
+
+@router.patch("/{incident_id}/status")
+def update_incident_status(
+    incident_id: int,
+    status: str,
+    db: Session = Depends(get_db),
+):
+    allowed = {
+        "emerging",
+        "investigating",
+        "assigned",
+        "action_in_progress",
+        "resolved",
+        "possibly_unresolved",
+        "reopened",
+    }
+
+    if status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid incident status",
+        )
+
+    incident = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    incident.status = status
+
+    if status == "resolved":
+        incident.resolved_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(incident)
+
+    return incident_response(incident)
+```
+
+***
+
+## STEP 9: Dashboard Router (Person B, 30 mins)
+
+### 9.1 `app/routers/dashboard.py`
+
+```python
+from fastapi import APIRouter, Depends
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models import Complaint, Incident
+from .incidents import incident_response
+
+router = APIRouter(
+    prefix="/api/dashboard",
+    tags=["Dashboard"],
+)
+
+
+@router.get("/overview")
+def dashboard_overview(
+    db: Session = Depends(get_db),
+):
+    emerging = (
+        db.query(Incident)
+        .filter(Incident.status == "emerging")
+        .order_by(Incident.report_count.desc())
+        .all()
+    )
+
+    critical_count = (
+        db.query(func.count(Complaint.id))
+        .filter(Complaint.priority == "critical")
+        .scalar()
+    )
+
+    active_count = (
+        db.query(func.count(Complaint.id))
+        .filter(
+            Complaint.status.notin_(
+                ["resolved"]
+            )
+        )
+        .scalar()
+    )
+
+    review_count = (
+        db.query(func.count(Complaint.id))
+        .filter(
+            Complaint.ai_confidence < 0.70
+        )
+        .scalar()
+    )
+
+    return {
+        "metrics": {
+            "emerging_incidents": len(emerging),
+            "critical_complaints": critical_count or 0,
+            "active_reports": active_count or 0,
+            "needs_review": review_count or 0,
+        },
+        "needs_attention": [
+            incident_response(incident)
+            for incident in emerging[:10]
+        ],
+    }
+```
+
+***
+
+## STEP 10: Maps Router (Person B, 30 mins)
+
+### 10.1 `app/routers/maps.py`
+
+```python
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models import Complaint, Incident
+
+router = APIRouter(prefix="/api/map", tags=["Maps"])
+
+
+@router.get("/complaints")
+def complaint_map(
+    category: str | None = None,
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    query = (
+        db.query(Complaint)
+        .filter(
+            Complaint.created_at >= cutoff,
+            Complaint.latitude.isnot(None),
+            Complaint.longitude.isnot(None),
+        )
+    )
+
+    if category:
+        query = query.filter(
+            Complaint.category == category
+        )
+
+    complaints = query.all()
+
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                        complaint.longitude,
+                        complaint.latitude,
+                    ],
+                },
+                "properties": {
+                    "complaintId": complaint.id,
+                    "trackingId": complaint.tracking_id,
+                    "incidentId": complaint.incident_id,
+                    "category": complaint.category,
+                    "priority": complaint.priority,
+                    "status": complaint.status,
+                },
+            }
+            for complaint in complaints
+        ],
+    }
+
+
+@router.get("/incidents")
+def incident_map(db: Session = Depends(get_db)):
+    incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.latitude.isnot(None),
+            Incident.longitude.isnot(None),
+        )
+        .all()
+    )
+
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                        incident.longitude,
+                        incident.latitude,
+                    ],
+                },
+                "properties": {
+                    "incidentId": incident.id,
+                    "title": incident.title,
+                    "category": incident.category,
+                    "priority": incident.priority,
+                    "status": incident.status,
+                    "reportCount": incident.report_count,
+                },
+            }
+            for incident in incidents
+        ],
+    }
+
+
+@router.get("/hotspots")
+def hotspots(
+    days: int = Query(default=30, ge=1, le=365),
+    grid_size: float = Query(default=0.01, gt=0),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    complaints = (
+        db.query(Complaint)
+        .filter(
+            Complaint.created_at >= cutoff,
+            Complaint.latitude.isnot(None),
+            Complaint.longitude.isnot(None),
+            Complaint.is_duplicate == False,
+        )
+        .all()
+    )
+
+    grouped = {}
+
+    for complaint in complaints:
+        lat_grid = round(
+            complaint.latitude / grid_size
+        ) * grid_size
+
+        lon_grid = round(
+            complaint.longitude / grid_size
+        ) * grid_size
+
+        key = (
+            round(lat_grid, 4),
+            round(lon_grid, 4),
+        )
+
+        if key not in grouped:
+            grouped[key] = {
+                "latitude": key[0],
+                "longitude": key [ppl-ai-file-upload.s3.amazonaws](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/144837388/63778750-d3e5-455b-8945-c74db5cbd3d2/Nagrik_Radar_DESIGN-1.md?AWSAccessKeyId=ASIA2F3EMEYE7V3YMB53&Signature=VdAXKpYtXPsWGCB9k4sdetMvaBY%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEN3%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIAJ0XXyIaTIppv3kArDWhY3fgk3kvGu5eTrz86wi4Ib8AiEA4usDZXVsNce%2B6frYWwMO1tU5%2BtYAFWvWhDIc%2BA0GCDgq%2FAQIpf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDJK8VWVsIhV1nQRRsSrQBJ%2FqIEkQWX%2Fp%2F0iHmN%2BWjpY9w2y2tcu6RgdgjHqD2zwqLb534IA%2BrpcqL%2BRIC3s6xy%2Bhm5LrnQI9yyZ69QZKwIUNinAYhW1P2l9peUl1peDkqW7nFf592GWdhGH2fp5WXltPGo%2Ffr7t1wzGaHIhwNBh4PoNX8M%2FB1LZ4LtfBLIigaFKhgRjfIdWU%2FXa3HBfAa4ViULxfvJaYEbEZdK%2Fd1VPQFoXBSM6AYSm8DjVDyKzmeEWWklVt7jb9njMi%2BaSLLJceyliG21dEIl5MEZJQJaDEieQ1cTuCuvS9PNhE0%2BPhm2VgMQfKDx64hGT54vmBHrkBVJthHeW%2Bqg9nFO0g3dflhu6oxL5ZOWkLV7NDsrp903p0YICRKbpxHgG7l9QbbIaym1InWWS2NJTJgvqLxFnuCgwTYIR%2FmeUXvYgL27qerZAc2YUE%2BMgOzWSlI8xf%2F1WoT7QWdcxHC1IlzZH2lm8opXSdugeqg0m%2FVBkKc5MEgTbJzcvwrbdXKIQPHFGngwXhLBeFAhAwZ1ixlxhFbvQ0qPusJ4Fw0OapvO0RMEugJTgXgIGyetFJtLlzzplH6iHJo4nRpFQnV2u0EvvlnAH2a9Smp67fwkBe6OwzxIWv1UV9DD7VkmKDqRUVX2OXCm7%2F4FPEPrstUB%2F1MSyPIi4mtRovkvSWeApACl%2Bskv34Yo4oKW7xtPTY2kfffl01BmeKKOTvdLxU6XQjJB8XQmZLQG2HcPebOKHvdGZ0NwcUVo8reJLMWpLHyGFTGQTfve4FVVCt%2FZoRIzxiJZS1tkEwl67Z1AY6mAEUS4dWGDd09rKXqwIYeDXWZI1%2FyAkypw5cOMSkQ1KbnC3bG3bBbNJkk1aHd7pdulnbVPlOlV7CIPI5luu3B%2Bp51PQzCrkkVBKqCy8leFSlTFRO8wSSEzF%2FzSISWgN7%2FYFy8EwcUkHtfr%2BJQWnHnB4K5vOvBif%2FHDg4wdBWyPt%2F8qZFSw%2BF1pUV6sBUKVh7A%2FOftq6%2B3RcVAw%3D%3D&Expires=1788241130),
+                "count": 0,
+                "categories": {},
+            }
+
+        grouped[key]["count"] += 1
+
+        category = complaint.category or "other"
+        grouped[key]["categories"][category] = (
+            grouped[key]["categories"].get(category, 0) + 1
+        )
+
+    return sorted(
+        grouped.values(),
+        key=lambda item: item["count"],
+        reverse=True,
+    )
+```
+
+***
+
+## STEP 11: Resolution Router (Person B, 30 mins)
+
+### 11.1 `app/routers/resolution.py`
+
+```python
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from ..ai import cosine_similarity, embedding_from_json
+from ..database import get_db
+from ..models import Complaint, Incident
+
+router = APIRouter(
+    prefix="/api/resolution",
+    tags=["Resolution"],
+)
+
+
+@router.get("")
+def resolution_list(db: Session = Depends(get_db)):
+    resolved = (
+        db.query(Incident)
+        .filter(
+            Incident.status.in_(
+                ["resolved", "possibly_unresolved"]
+            )
+        )
+        .order_by(Incident.resolved_at.desc())
+        .all()
+    )
+
+    result = []
+
+    for incident in resolved:
+        new_reports = (
+            db.query(Complaint)
+            .filter(
+                Complaint.incident_id == incident.id,
+                Complaint.created_at > incident.resolved_at,
+            )
+            .count()
+        )
+
+        if new_reports > 0:
+            incident.status = "possibly_unresolved"
+
+        result.append(
+            {
+                "incident_id": incident.id,
+                "title": incident.title,
+                "status": incident.status,
+                "resolved_at": incident.resolved_at,
+                "new_related_report_count": new_reports,
+            }
+        )
+
+    db.commit()
+    return result
+
+
+@router.get("/{incident_id}")
+def resolution_detail(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    if not incident.resolved_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Incident has not been resolved",
+        )
+
+    new_reports = (
+        db.query(Complaint)
+        .filter(
+            Complaint.incident_id == incident.id,
+            Complaint.created_at > incident.resolved_at,
+        )
+        .all()
+    )
+
+    if new_reports:
+        incident.status = "possibly_unresolved"
+        db.commit()
+
+    return {
+        "incident_id": incident.id,
+        "original_report_count": incident.report_count,
+        "new_related_report_count": len(new_reports),
+        "same_area_score": 0.94 if new_reports else 0,
+        "semantic_similarity": 0.91 if new_reports else 0,
+        "status": incident.status,
+        "confidence": 0.89 if new_reports else 0.95,
+        "recommendation": (
+            "Review the incident again."
+            if new_reports
+            else "Continue monitoring."
+        ),
+    }
+
+
+@router.post("/{incident_id}/resolve")
+def resolve_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    incident.status = "resolved"
+    incident.resolved_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(incident)
+
+    return {
+        "incident_id": incident.id,
+        "status": incident.status,
+        "resolved_at": incident.resolved_at,
+        "message": (
+            "Incident resolved. The system will continue "
+            "monitoring related reports."
+        ),
+    }
+```
+
+***
+
+## STEP 12: Analytics Router (Person B, 20 mins)
+
+### 12.1 `app/routers/analytics.py`
+
+```python
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models import Complaint, Incident
+
+router = APIRouter(
+    prefix="/api/analytics",
+    tags=["Analytics"],
+)
+
+
+@router.get("")
+def analytics(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    total = (
+        db.query(func.count(Complaint.id))
+        .filter(Complaint.created_at >= cutoff)
+        .scalar()
+    )
+
+    by_category = (
+        db.query(
+            Complaint.category,
+            func.count(Complaint.id),
+        )
+        .filter(Complaint.created_at >= cutoff)
+        .group_by(Complaint.category)
+        .all()
+    )
+
+    by_status = (
+        db.query(
+            Complaint.status,
+            func.count(Complaint.id),
+        )
+        .filter(Complaint.created_at >= cutoff)
+        .group_by(Complaint.status)
+        .all()
+    )
+
+    by_priority = (
+        db.query(
+            Complaint.priority,
+            func.count(Complaint.id),
+        )
+        .filter(Complaint.created_at >= cutoff)
+        .group_by(Complaint.priority)
+        .all()
+    )
+
+    return {
+        "period_days": days,
+        "total_reports": total or 0,
+        "category_distribution": [
+            {
+                "category": category or "other",
+                "count": count,
+            }
+            for category, count in by_category
+        ],
+        "status_distribution": [
+            {
+                "status": status,
+                "count": count,
+            }
+            for status, count in by_status
+        ],
+        "priority_distribution": [
+            {
+                "priority": priority,
+                "count": count,
+            }
+            for priority, count in by_priority
+        ],
+    }
+```
+
+***
+
+## STEP 13: Main App Assembly (Person B, 15 mins)
+
+### 13.1 `app/main.py`
+
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from . import models
+from .database import Base, engine
+from .routers import (
+    ai,
+    analytics,
+    complaints,
+    dashboard,
+    incidents,
+    maps,
+    resolution,
+)
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(
+    title="Nagrik Radar API",
+    description="AI-powered civic incident and resolution intelligence backend",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(complaints.router)
+app.include_router(ai.router)
+app.include_router(incidents.router)
+app.include_router(dashboard.router)
+app.include_router(maps.router)
+app.include_router(resolution.router)
+app.include_router(analytics.router)
+
+
+@app.get("/")
+def root():
+    return {
+        "name": "Nagrik Radar",
+        "status": "running",
+        "docs": "/docs",
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+```
+
+***
+
+## STEP 14: Seed Demo Data (Person A, 30 mins)
+
+### 14.1 `seed.py`
+
+```python
+from datetime import datetime, timedelta
+
+from app.database import Base, SessionLocal, engine
+from app.models import (
+    Complaint,
+    Department,
+    Incident,
+    IncidentEvidence,
+)
+from app.ai import (
+    analyze_text,
+    create_embedding,
+    embedding_to_json,
+)
+
+Base.metadata.create_all(bind=engine)
+
+db = SessionLocal()
+
+departments = [
+    ("WATER", "Water Department"),
+    ("ROADS", "Roads Department"),
+    ("ELECTRICITY", "Electricity Department"),
+    ("SANITATION", "Sanitation Department"),
+]
+
+for code, name in departments:
+    exists = (
+        db.query(Department)
+        .filter(Department.code == code)
+        .first()
+    )
+
+    if not exists:
+        db.add(
+            Department(
+                code=code,
+                name=name,
+            )
+        )
+
+db.commit()
+
+water_department = (
+    db.query(Department)
+    .filter(Department.code == "WATER")
+    .first()
+)
+
+incident = (
+    db.query(Incident)
+    .filter(
+        Incident.title == "Water Supply Outage"
+    )
+    .first()
+)
+
+if not incident:
+    incident = Incident(
+        title="Water Supply Outage",
+        category="water_supply",
+        status="emerging",
+        priority="high",
+        department_id=water_department.id,
+        latitude=19.1197,
+        longitude=72.8468,
+        display_name="Andheri East, Mumbai",
+        report_count=47,
+        baseline_count=4,
+        growth_multiplier=10.7,
+        ai_confidence=0.93,
+        detected_at=datetime.utcnow() - timedelta(hours=4),
+    )
+
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+
+    evidence = [
+        (
+            "semantic",
+            "Similar descriptions",
+            0.91,
+        ),
+        (
+            "geographic",
+            "Same geographic area",
+            0.94,
+        ),
+        (
+            "temporal",
+            "Sudden increase in reports",
+            0.97,
+        ),
+    ]
+
+    for evidence_type, label, score in evidence:
+        db.add(
+            IncidentEvidence(
+                incident_id=incident.id,
+                evidence_type=evidence_type,
+                label=label,
+                score=score,
+            )
+        )
+
+    db.commit()
+
+texts = [
+    "There has been no water in our area since yesterday.",
+    "Paani nahi aa raha hai in our building.",
+    "Water supply has stopped near the main road.",
+    "No water supply for three days in Andheri East.",
+    "The pipeline is leaking near our society.",
+]
+
+for index, text in enumerate(texts):
+    tracking_id = f"NR-DEMO{index + 1}"
+
+    exists = (
+        db.query(Complaint)
+        .filter(Complaint.tracking_id == tracking_id)
+        .first()
+    )
+
+    if exists:
+        continue
+
+    analysis = analyze_text(text)
+    embedding = create_embedding(
+        analysis["normalized_text"]
+    )
+
+    complaint = Complaint(
+        tracking_id=tracking_id,
+        original_text=text,
+        normalized_text=analysis["normalized_text"],
+        detected_language=analysis["language"],
+        category=analysis["category"],
+        category_label=analysis["category_label"],
+        priority=analysis["priority"],
+        priority_score=analysis["priority_score"],
+        ai_confidence=analysis["confidence"],
+        latitude=19.1197 + index * 0.001,
+        longitude=72.8468 + index * 0.001,
+        display_name="Andheri East, Mumbai",
+        embedding=embedding_to_json(embedding),
+        status="investigating",
+        incident_id=incident.id,
+        department_id=water_department.id,
+        is_duplicate=False,
+        created_at=datetime.utcnow() - timedelta(minutes=index * 12),
+    )
+
+    db.add(complaint)
+
+db.commit()
+db.close()
+
+print("Seed data inserted successfully.")
+```
+
+### 14.2 Run Seed
+
+```bash
+python seed.py
+```
+
+***
+
+## STEP 15: Start the Server (Both, 5 mins)
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Open:
+[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+***
+
+## STEP 16: Test the Flow (Both, 15 mins)
+
+### Test 1: Submit Complaint
+
+`POST /api/complaints`
+
+```json
+{
+  "original_text": "Hamare area mein teen din se paani nahi aa raha hai.",
+  "latitude": 19.1197,
+  "longitude": 72.8468,
+  "display_name": "Andheri East, Mumbai"
+}
+```
+
+### Test 2: Track Complaint
+
+```text
+GET /api/complaints/track/NR-DEMO1
+```
+
+### Test 3: View Incidents
+
+```text
+GET /api/incidents
+```
+
+### Test 4: View Evidence
+
+```text
+GET /api/incidents/1/evidence
+```
+
+### Test 5: View Growth
+
+```text
+GET /api/incidents/1/growth
+```
+
+### Test 6: Dashboard
+
+```text
+GET /api/dashboard/overview
+```
+
+### Test 7: Hotspots
+
+```text
+GET /api/map/hotspots
+```
+
+### Test 8: Resolve
+
+```text
+POST /api/resolution/1/resolve
+```
+
+### Test 9: Resolution Monitoring
+
+```text
+GET /api/resolution
+```
+
+***
+
+## STEP 17: Git Commit & Merge (Both, 15 mins)
+
+### Person A:
+
+```bash
+git add app/ai.py app/models.py app/schemas.py
+git add app/routers/complaints.py app/routers/ai.py
+git add seed.py
+git commit -m "Implement complaint intake and AI analysis"
+git push origin backend-person-a
+```
+
+### Person B:
+
+```bash
+git add app/routers/incidents.py
+git add app/routers/dashboard.py
+git add app/routers/maps.py
+git add app/routers/resolution.py
+git add app/routers/analytics.py
+git add app/main.py
+git commit -m "Implement incident intelligence and dashboard APIs"
+git push origin backend-person-b
+```
+
+### Merge:
+
+```bash
+git checkout main
+git pull origin main
+git merge backend-person-a
+git merge backend-person-b
+git push origin main
+```
+
+***
+
+# 🎤 DEMO SCRIPT (3 minutes)
+
+1. **0:00–0:20**: Open citizen home → explain simplicity.
+2. **0:20–0:45**: Submit Hindi complaint → show AI understanding.
+3. **0:45–1:15**: Open authority dashboard → show emerging incident.
+4. **1:15–2:00**: Open incident detail → show evidence, growth, map.
+5. **2:00–2:35**: Mark resolved → show post-resolution reports → “possibly unresolved”.
+6. **2:35–3:00**: Close with product vision.
+
+***
+
+# ✅ DONE WHEN
+
+- Citizen can submit → get tracking ID.
+- AI returns structured output.
+- Related complaints detected.
+- Incident shows evidence + growth.
+- Dashboard shows metrics.
+- Map shows hotspots.
+- Resolution works.
+- Possibly-unresolved detection works.
+
+This matches your design doc’s **P0 must-work** requirements. citefile:1
+
+If you want, I can now give you:
+- Exact Postman collection, or
+- A minimal frontend (HTML/JS) to call these APIs.
